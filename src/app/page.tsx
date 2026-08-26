@@ -11,6 +11,28 @@ type Household = {
   created_at: string;
 };
 
+type Device = {
+  id: string;
+  name: string;
+  room: string;
+  type: string;
+  capabilities: string[];
+};
+
+const TYPE_LABELS: Record<string, string> = {
+  blind: 'Persiana',
+  light: 'Llum',
+  plug: 'Endoll',
+  sensor: 'Sensor',
+};
+
+const CAPABILITIES: Record<string, string[]> = {
+  blind: ['position', 'stop'],
+  light: ['power', 'brightness'],
+  plug: ['power'],
+  sensor: ['reading'],
+};
+
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,6 +44,11 @@ export default function Home() {
   const [householdLoading, setHouseholdLoading] = useState(false);
   const [newHouseholdName, setNewHouseholdName] = useState('');
   const [joinCode, setJoinCode] = useState('');
+
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [newDeviceName, setNewDeviceName] = useState('');
+  const [newDeviceRoom, setNewDeviceRoom] = useState('');
+  const [newDeviceType, setNewDeviceType] = useState('blind');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -42,6 +69,14 @@ export default function Home() {
     }
   }, [session]);
 
+  useEffect(() => {
+    if (household) {
+      loadDevices(household.id);
+    } else {
+      setDevices([]);
+    }
+  }, [household]);
+
   async function loadHousehold() {
     setHouseholdLoading(true);
     const { data: membership } = await supabase
@@ -60,6 +95,15 @@ export default function Home() {
       setHousehold(null);
     }
     setHouseholdLoading(false);
+  }
+
+  async function loadDevices(householdId: string) {
+    const { data } = await supabase
+      .from('devices')
+      .select('id, name, room, type, capabilities')
+      .eq('household_id', householdId)
+      .order('created_at');
+    setDevices(data ?? []);
   }
 
   async function handleSignUp() {
@@ -97,73 +141,181 @@ export default function Home() {
     else await loadHousehold();
   }
 
-  if (loading) return <p style={{ padding: 24 }}>Carregant...</p>;
+  async function handleAddDevice() {
+    if (!household || !newDeviceName || !newDeviceRoom) return;
+    setMessage('');
+    const { error } = await supabase.from('devices').insert({
+      household_id: household.id,
+      device_uid: crypto.randomUUID(),
+      name: newDeviceName,
+      room: newDeviceRoom,
+      type: newDeviceType,
+      capabilities: CAPABILITIES[newDeviceType],
+    });
+    if (error) {
+      setMessage('Error: ' + error.message);
+    } else {
+      setNewDeviceName('');
+      setNewDeviceRoom('');
+      await loadDevices(household.id);
+    }
+  }
+
+  if (loading) {
+    return <p className="p-6 text-gray-500">Carregant...</p>;
+  }
 
   if (!session) {
     return (
-      <main style={{ padding: 24, fontFamily: 'sans-serif', maxWidth: 320 }}>
-        <h1>Berta</h1>
-        <p>Inicia sessio o crea un compte</p>
-        <input
-          type="email"
-          placeholder="Correu"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8 }}
-        />
-        <input
-          type="password"
-          placeholder="Contrasenya"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8 }}
-        />
-        <button onClick={handleSignIn} style={{ marginRight: 8 }}>Inicia sessio</button>
-        <button onClick={handleSignUp}>Crea compte</button>
-        {message && <p>{message}</p>}
+      <main className="min-h-screen bg-[#F5F2EC] flex items-center justify-center p-6">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
+          <h1 className="text-2xl font-bold text-[#1B211D] mb-1">Berta</h1>
+          <p className="text-sm text-gray-500 mb-4">Inicia sessio o crea un compte</p>
+          <input
+            type="email"
+            placeholder="Correu"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+          />
+          <input
+            type="password"
+            placeholder="Contrasenya"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="w-full mb-3 p-3 rounded-lg border border-gray-300"
+          />
+          <div className="flex gap-2">
+            <button
+              onClick={handleSignIn}
+              className="flex-1 bg-[#20544A] text-white rounded-lg py-3 font-semibold"
+            >
+              Inicia sessio
+            </button>
+            <button
+              onClick={handleSignUp}
+              className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
+            >
+              Crea compte
+            </button>
+          </div>
+          {message && <p className="text-sm text-red-600 mt-3">{message}</p>}
+        </div>
       </main>
     );
   }
 
-  if (householdLoading) return <p style={{ padding: 24 }}>Carregant la teva llar...</p>;
+  if (householdLoading) {
+    return <p className="p-6 text-gray-500">Carregant la teva llar...</p>;
+  }
 
   if (!household) {
     return (
-      <main style={{ padding: 24, fontFamily: 'sans-serif', maxWidth: 320 }}>
-        <h1>Encara no tens cap llar</h1>
+      <main className="min-h-screen bg-[#F5F2EC] flex items-center justify-center p-6">
+        <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
+          <h1 className="text-xl font-bold text-[#1B211D] mb-4">Encara no tens cap llar</h1>
 
-        <h2>Crea una de nova</h2>
-        <input
-          type="text"
-          placeholder="Nom de la llar"
-          value={newHouseholdName}
-          onChange={(e) => setNewHouseholdName(e.target.value)}
-          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8 }}
-        />
-        <button onClick={handleCreateHousehold}>Crea la meva llar</button>
+          <h2 className="font-semibold mb-2">Crea una de nova</h2>
+          <input
+            type="text"
+            placeholder="Nom de la llar"
+            value={newHouseholdName}
+            onChange={(e) => setNewHouseholdName(e.target.value)}
+            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+          />
+          <button
+            onClick={handleCreateHousehold}
+            className="w-full bg-[#20544A] text-white rounded-lg py-3 font-semibold mb-6"
+          >
+            Crea la meva llar
+          </button>
 
-        <h2 style={{ marginTop: 24 }}>O uneix-te amb un codi</h2>
-        <input
-          type="text"
-          placeholder="Codi de 6 caracters"
-          value={joinCode}
-          onChange={(e) => setJoinCode(e.target.value)}
-          style={{ display: 'block', width: '100%', marginBottom: 8, padding: 8 }}
-        />
-        <button onClick={handleJoinHousehold}>Uneix-me</button>
+          <h2 className="font-semibold mb-2">O uneix-te amb un codi</h2>
+          <input
+            type="text"
+            placeholder="Codi de 6 caracters"
+            value={joinCode}
+            onChange={(e) => setJoinCode(e.target.value)}
+            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+          />
+          <button
+            onClick={handleJoinHousehold}
+            className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
+          >
+            Uneix-me
+          </button>
 
-        {message && <p>{message}</p>}
-        <button onClick={handleSignOut} style={{ marginTop: 24 }}>Tanca sessio</button>
+          {message && <p className="text-sm text-red-600 mt-3">{message}</p>}
+
+          <button onClick={handleSignOut} className="text-sm text-gray-400 underline mt-6">
+            Tanca sessio
+          </button>
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={{ padding: 24, fontFamily: 'sans-serif' }}>
-      <h1>{household.name}</h1>
-      <p>Codi per convidar familiars: <strong>{household.invite_code}</strong></p>
-      <p>Ets: {session.user.email}</p>
-      <button onClick={handleSignOut}>Tanca sessio</button>
+    <main className="min-h-screen bg-[#F5F2EC] p-6">
+      <div className="max-w-md mx-auto">
+        <h1 className="text-2xl font-bold text-[#1B211D] mb-1">{household.name}</h1>
+        <p className="text-sm text-gray-600 mb-6">
+          Codi per convidar familiars: <strong className="text-[#20544A]">{household.invite_code}</strong>
+        </p>
+
+        <div className="space-y-3 mb-6">
+          {devices.length === 0 && (
+            <p className="text-gray-500 text-sm">Encara no hi ha cap dispositiu.</p>
+          )}
+          {devices.map((d) => (
+            <div key={d.id} className="bg-white rounded-2xl shadow p-4">
+              <p className="font-semibold text-[#1B211D]">{d.name}</p>
+              <p className="text-sm text-gray-500">
+                {d.room} · {TYPE_LABELS[d.type] ?? d.type}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow p-4 mb-6">
+          <h2 className="font-semibold text-[#1B211D] mb-3">Afegeix un dispositiu</h2>
+          <input
+            type="text"
+            placeholder="Nom (p. ex. Persiana del menjador)"
+            value={newDeviceName}
+            onChange={(e) => setNewDeviceName(e.target.value)}
+            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+          />
+          <input
+            type="text"
+            placeholder="Habitacio (p. ex. Menjador)"
+            value={newDeviceRoom}
+            onChange={(e) => setNewDeviceRoom(e.target.value)}
+            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+          />
+          <select
+            value={newDeviceType}
+            onChange={(e) => setNewDeviceType(e.target.value)}
+            className="w-full mb-3 p-3 rounded-lg border border-gray-300"
+          >
+            <option value="blind">Persiana</option>
+            <option value="light">Llum</option>
+            <option value="plug">Endoll</option>
+            <option value="sensor">Sensor</option>
+          </select>
+          <button
+            onClick={handleAddDevice}
+            className="w-full bg-[#20544A] text-white rounded-lg py-3 font-semibold"
+          >
+            Afegeix
+          </button>
+          {message && <p className="text-sm text-red-600 mt-3">{message}</p>}
+        </div>
+
+        <button onClick={handleSignOut} className="text-sm text-gray-400 underline">
+          Tanca sessio
+        </button>
+      </div>
     </main>
   );
 }
