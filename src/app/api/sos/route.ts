@@ -7,9 +7,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'No hi ha contactes' }, { status: 400 });
   }
 
-  await Promise.all(
-    contacts.map((contact: { email: string; name: string }) =>
-      fetch('https://api.resend.com/emails', {
+  if (!process.env.RESEND_API_KEY) {
+    return NextResponse.json({ error: 'Falta la clau de Resend al servidor' }, { status: 500 });
+  }
+
+  const results = await Promise.all(
+    contacts.map(async (contact: { email: string; name: string }) => {
+      const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
@@ -21,9 +25,16 @@ export async function POST(request: Request) {
           subject: `Alerta SOS - ${householdName}`,
           html: `<p>S'ha activat el boto de SOS a <strong>${householdName}</strong>.</p><p>Activat per: ${triggeredByEmail}</p><p>Contacta amb ells el mes aviat possible.</p>`,
         }),
-      })
-    )
+      });
+      const body = await res.json().catch(() => null);
+      return { email: contact.email, ok: res.ok, status: res.status, body };
+    })
   );
+
+  const failed = results.filter((r) => !r.ok);
+  if (failed.length > 0) {
+    return NextResponse.json({ error: 'Alguns correus han fallat', details: failed }, { status: 500 });
+  }
 
   return NextResponse.json({ ok: true });
 }
