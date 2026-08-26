@@ -27,6 +27,12 @@ type Device = {
   state: DeviceState | null;
 };
 
+type Contact = {
+  id: string;
+  name: string;
+  email: string;
+};
+
 const TYPE_LABELS: Record<string, string> = {
   blind: 'Persiana',
   light: 'Llum',
@@ -62,6 +68,11 @@ export default function Home() {
   const [newDeviceRoom, setNewDeviceRoom] = useState('');
   const [newDeviceType, setNewDeviceType] = useState('blind');
 
+  const [contacts, setContacts] = useState<Contact[]>([]);
+  const [newContactName, setNewContactName] = useState('');
+  const [newContactEmail, setNewContactEmail] = useState('');
+  const [sosSending, setSosSending] = useState(false);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
@@ -84,8 +95,10 @@ export default function Home() {
   useEffect(() => {
     if (household) {
       loadDevices(household.id);
+      loadContacts(household.id);
     } else {
       setDevices([]);
+      setContacts([]);
     }
   }, [household]);
 
@@ -116,6 +129,15 @@ export default function Home() {
       .eq('household_id', householdId)
       .order('created_at');
     setDevices(data ?? []);
+  }
+
+  async function loadContacts(householdId: string) {
+    const { data } = await supabase
+      .from('emergency_contacts')
+      .select('id, name, email')
+      .eq('household_id', householdId)
+      .order('created_at');
+    setContacts(data ?? []);
   }
 
   async function handleSignUp() {
@@ -223,6 +245,61 @@ export default function Home() {
     }
   }
 
+  async function handleAddContact() {
+    if (!household || !newContactName || !newContactEmail) return;
+    setMessage('');
+    const { error } = await supabase.from('emergency_contacts').insert({
+      household_id: household.id,
+      name: newContactName,
+      email: newContactEmail,
+    });
+    if (error) {
+      setMessage('Error: ' + error.message);
+    } else {
+      setNewContactName('');
+      setNewContactEmail('');
+      await loadContacts(household.id);
+    }
+  }
+
+  async function handleDeleteContact(id: string) {
+    if (!household) return;
+    await supabase.from('emergency_contacts').delete().eq('id', id);
+    await loadContacts(household.id);
+  }
+
+  async function handleSOS() {
+    if (!household || !session || contacts.length === 0) {
+      setMessage('Afegeix algun contacte abans denviar un SOS.');
+      return;
+    }
+    setSosSending(true);
+    setMessage('');
+    await supabase.from('sos_events').insert({
+      household_id: household.id,
+      triggered_by: session.user.id,
+    });
+    try {
+      const res = await fetch('/api/sos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          householdName: household.name,
+          triggeredByEmail: session.user.email,
+          contacts,
+        }),
+      });
+      if (res.ok) {
+        setMessage('Avis enviat als familiars.');
+      } else {
+        setMessage('No sha pogut enviar lavis.');
+      }
+    } catch {
+      setMessage('No sha pogut enviar lavis.');
+    }
+    setSosSending(false);
+  }
+
   if (loading) {
     return <p className="p-6 text-gray-500">Carregant...</p>;
   }
@@ -324,6 +401,16 @@ export default function Home() {
         <p className="text-sm text-gray-600 mb-6">
           Codi per convidar familiars: <strong className="text-[#20544A]">{household.invite_code}</strong>
         </p>
+
+        <button
+          onClick={handleSOS}
+          disabled={sosSending}
+          className="w-full bg-red-600 text-white rounded-2xl py-6 text-xl font-extrabold mb-6 shadow-lg disabled:opacity-60"
+        >
+          {sosSending ? 'ENVIANT...' : 'SOS - AVISA LA FAMILIA'}
+        </button>
+
+        {message && <p className="text-sm text-center text-[#20544A] font-semibold mb-4">{message}</p>}
 
         <div className="space-y-3 mb-6">
           {devices.length === 0 && (
@@ -499,7 +586,49 @@ export default function Home() {
           >
             Afegeix
           </button>
-          {message && <p className="text-sm text-red-600 mt-3">{message}</p>}
+        </div>
+
+        <div className="bg-white rounded-2xl shadow p-4 mb-6">
+          <h2 className="font-semibold text-[#1B211D] mb-3">Contactes d&apos;emergencia</h2>
+          <div className="space-y-2 mb-3">
+            {contacts.length === 0 && (
+              <p className="text-gray-500 text-sm">Cap contacte encara.</p>
+            )}
+            {contacts.map((c) => (
+              <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+                <div>
+                  <p className="text-sm font-semibold text-[#1B211D]">{c.name}</p>
+                  <p className="text-xs text-gray-500">{c.email}</p>
+                </div>
+                <button
+                  onClick={() => handleDeleteContact(c.id)}
+                  className="text-xs text-red-600 underline"
+                >
+                  Esborra
+                </button>
+              </div>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Nom del familiar"
+            value={newContactName}
+            onChange={(e) => setNewContactName(e.target.value)}
+            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+          />
+          <input
+            type="email"
+            placeholder="Correu del familiar"
+            value={newContactEmail}
+            onChange={(e) => setNewContactEmail(e.target.value)}
+            className="w-full mb-3 p-3 rounded-lg border border-gray-300"
+          />
+          <button
+            onClick={handleAddContact}
+            className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
+          >
+            Afegeix contacte
+          </button>
         </div>
 
         <button onClick={handleSignOut} className="text-sm text-gray-400 underline">
