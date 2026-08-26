@@ -1,16 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import type { Session } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabaseClient';
 
+type Household = {
+  id: string;
+  name: string;
+  invite_code: string;
+  created_at: string;
+};
+
 export default function Home() {
-  const [session, setSession] = useState<any>(null);
+  const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState('');
 
-  const [household, setHousehold] = useState<any>(null);
+  const [household, setHousehold] = useState<Household | null>(null);
   const [householdLoading, setHouseholdLoading] = useState(false);
   const [newHouseholdName, setNewHouseholdName] = useState('');
   const [joinCode, setJoinCode] = useState('');
@@ -124,7 +132,7 @@ export default function Home() {
       <main style={{ padding: 24, fontFamily: 'sans-serif', maxWidth: 320 }}>
         <h1>Encara no tens cap llar</h1>
 
-        <h2>Crea'n una de nova</h2>
+        <h2>Crea una de nova</h2>
         <input
           type="text"
           placeholder="Nom de la llar"
