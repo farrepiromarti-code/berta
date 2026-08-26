@@ -11,6 +11,11 @@ type Household = {
   created_at: string;
 };
 
+type DeviceState = {
+  power?: boolean;
+  position?: number;
+};
+
 type Device = {
   id: string;
   name: string;
@@ -19,6 +24,7 @@ type Device = {
   capabilities: string[];
   mode: 'auto' | 'manual';
   schedule: { close_at?: string } | null;
+  state: DeviceState | null;
 };
 
 const TYPE_LABELS: Record<string, string> = {
@@ -106,7 +112,7 @@ export default function Home() {
   async function loadDevices(householdId: string) {
     const { data } = await supabase
       .from('devices')
-      .select('id, name, room, type, capabilities, mode, schedule')
+      .select('id, name, room, type, capabilities, mode, schedule, state')
       .eq('household_id', householdId)
       .order('created_at');
     setDevices(data ?? []);
@@ -167,17 +173,24 @@ export default function Home() {
     }
   }
 
-  async function sendCommand(deviceId: string, command: Record<string, unknown>, mode?: 'auto' | 'manual') {
+  async function sendCommand(
+    deviceId: string,
+    command: Record<string, unknown>,
+    mode?: 'auto' | 'manual',
+    stateUpdate?: DeviceState
+  ) {
     if (!household) return;
+    const device = devices.find((d) => d.id === deviceId);
     const update: Record<string, unknown> = { pending_command: command };
     if (mode) update.mode = mode;
+    if (stateUpdate) update.state = { ...(device?.state ?? {}), ...stateUpdate };
     const { error } = await supabase.from('devices').update(update).eq('id', deviceId);
     if (error) setMessage('Error: ' + error.message);
     else await loadDevices(household.id);
   }
 
   async function togglePower(device: Device, turnOn: boolean) {
-    await sendCommand(device.id, { capability: 'power', value: turnOn }, 'manual');
+    await sendCommand(device.id, { capability: 'power', value: turnOn }, 'manual', { power: turnOn });
   }
 
   async function setMode(device: Device, mode: 'auto' | 'manual') {
@@ -205,7 +218,8 @@ export default function Home() {
     if (action === 'stop') {
       await sendCommand(device.id, { capability: 'stop' });
     } else {
-      await sendCommand(device.id, { capability: 'position', value: action === 'open' ? 100 : 0 });
+      const position = action === 'open' ? 100 : 0;
+      await sendCommand(device.id, { capability: 'position', value: position }, undefined, { position });
     }
   }
 
@@ -316,96 +330,139 @@ export default function Home() {
             <p className="text-gray-500 text-sm">Encara no hi ha cap dispositiu.</p>
           )}
 
-          {devices.map((d) => (
-            <div key={d.id} className="bg-white rounded-2xl shadow p-4">
-              <p className="font-semibold text-[#1B211D]">{d.name}</p>
-              <p className="text-sm text-gray-500 mb-3">
-                {d.room} - {TYPE_LABELS[d.type] ?? d.type}
-              </p>
+          {devices.map((d) => {
+            const isOn = Boolean(d.state?.power);
+            const position = d.state?.position;
+            const isOpen = position === 100;
+            const isClosed = position === 0;
 
-              {d.type === 'blind' && (
-                <div>
-                  <div className="flex gap-2 mb-3">
-                    <button
-                      onClick={() => blindAction(d, 'open')}
-                      className="flex-1 bg-[#20544A] text-white rounded-lg py-2 text-sm font-semibold"
-                    >
-                      Obrir
-                    </button>
-                    <button
-                      onClick={() => blindAction(d, 'stop')}
-                      className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-2 text-sm font-semibold"
-                    >
-                      Aturar
-                    </button>
-                    <button
-                      onClick={() => blindAction(d, 'close')}
-                      className="flex-1 bg-[#A8792A] text-white rounded-lg py-2 text-sm font-semibold"
-                    >
-                      Tancar
-                    </button>
-                  </div>
-                  <label className="text-xs text-gray-500">Tanca automaticament a les:</label>
-                  <input
-                    type="time"
-                    defaultValue={d.schedule?.close_at ?? ''}
-                    onBlur={(e) => setBlindSchedule(d, e.target.value)}
-                    className="w-full p-2 rounded-lg border border-gray-300 mt-1"
-                  />
-                </div>
-              )}
+            return (
+              <div key={d.id} className="bg-white rounded-2xl shadow p-4">
+                <p className="font-semibold text-[#1B211D]">{d.name}</p>
+                <p className="text-sm text-gray-500 mb-3">
+                  {d.room} - {TYPE_LABELS[d.type] ?? d.type}
+                </p>
 
-              {(d.type === 'light' || d.type === 'fan' || d.type === 'plug') && (
-                <div>
-                  <div className="flex gap-2 mb-3">
-                    <button
-                      onClick={() => togglePower(d, true)}
-                      className="flex-1 bg-[#20544A] text-white rounded-lg py-2 text-sm font-semibold"
-                    >
-                      Engega
-                    </button>
-                    <button
-                      onClick={() => togglePower(d, false)}
-                      className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-2 text-sm font-semibold"
-                    >
-                      Apaga
-                    </button>
-                  </div>
-                  {(d.type === 'light' || d.type === 'fan') && (
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-gray-500">
-                        Mode: {d.mode === 'auto' ? 'Automatic' : 'Manual'}
-                      </span>
-                      <button
-                        onClick={() => setMode(d, d.mode === 'auto' ? 'manual' : 'auto')}
-                        className="text-[#20544A] underline text-sm"
+                {d.type === 'blind' && (
+                  <div>
+                    <div className="mb-3">
+                      <span
+                        className={
+                          'inline-block px-3 py-1 rounded-full text-sm font-bold ' +
+                          (isOpen
+                            ? 'bg-[#20544A] text-white'
+                            : isClosed
+                            ? 'bg-[#A8792A] text-white'
+                            : 'bg-gray-100 text-gray-500')
+                        }
                       >
-                        Canvia a {d.mode === 'auto' ? 'Manual' : 'Automatic'}
+                        {isOpen ? 'OBERTA' : isClosed ? 'TANCADA' : 'ESTAT DESCONEGUT'}
+                      </span>
+                    </div>
+                    <div className="flex gap-2 mb-3">
+                      <button
+                        onClick={() => blindAction(d, 'open')}
+                        className={
+                          'flex-1 rounded-lg py-3 text-sm font-bold ' +
+                          (isOpen ? 'bg-[#20544A] text-white' : 'bg-[#E7F1EC] text-[#20544A]')
+                        }
+                      >
+                        Obrir
+                      </button>
+                      <button
+                        onClick={() => blindAction(d, 'stop')}
+                        className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-3 text-sm font-bold"
+                      >
+                        Aturar
+                      </button>
+                      <button
+                        onClick={() => blindAction(d, 'close')}
+                        className={
+                          'flex-1 rounded-lg py-3 text-sm font-bold ' +
+                          (isClosed ? 'bg-[#A8792A] text-white' : 'bg-[#F4E9DD] text-[#A8792A]')
+                        }
+                      >
+                        Tancar
                       </button>
                     </div>
-                  )}
-                </div>
-              )}
+                    <label className="text-xs text-gray-500">Tanca automaticament a les:</label>
+                    <input
+                      type="time"
+                      defaultValue={d.schedule?.close_at ?? ''}
+                      onBlur={(e) => setBlindSchedule(d, e.target.value)}
+                      className="w-full p-2 rounded-lg border border-gray-300 mt-1"
+                    />
+                  </div>
+                )}
 
-              {d.type === 'buzzer' && (
-                <div>
-                  <p className="text-xs text-gray-500 mb-2">
-                    Es activa sol quan detecta fum o gas.
-                  </p>
-                  <button
-                    onClick={() => testBuzzer(d)}
-                    className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-2 text-sm font-semibold"
-                  >
-                    Prova
-                  </button>
-                </div>
-              )}
+                {(d.type === 'light' || d.type === 'fan' || d.type === 'plug') && (
+                  <div>
+                    <button
+                      onClick={() => togglePower(d, !isOn)}
+                      className={
+                        'w-full rounded-xl py-4 text-base font-bold mb-3 ' +
+                        (isOn
+                          ? 'bg-[#20544A] text-white'
+                          : 'bg-gray-100 text-gray-500 border-2 border-gray-200')
+                      }
+                    >
+                      {isOn ? 'ENCES - Toca per apagar' : 'APAGAT - Toca per encendre'}
+                    </button>
 
-              {d.type === 'sensor' && (
-                <p className="text-sm text-gray-500">Nomes lectura.</p>
-              )}
-            </div>
-          ))}
+                    {(d.type === 'light' || d.type === 'fan') && (
+                      <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                        <button
+                          onClick={() => setMode(d, 'auto')}
+                          className={
+                            'flex-1 py-3 text-sm font-bold ' +
+                            (d.mode === 'auto'
+                              ? 'bg-[#20544A] text-white'
+                              : 'bg-white text-gray-500')
+                          }
+                        >
+                          Automatic
+                        </button>
+                        <button
+                          onClick={() => setMode(d, 'manual')}
+                          className={
+                            'flex-1 py-3 text-sm font-bold ' +
+                            (d.mode === 'manual'
+                              ? 'bg-[#A8792A] text-white'
+                              : 'bg-white text-gray-500')
+                          }
+                        >
+                          Manual
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {d.type === 'buzzer' && (
+                  <div>
+                    <div className="mb-2">
+                      <span className="inline-block px-3 py-1 rounded-full text-sm font-bold bg-[#E7F1EC] text-[#20544A]">
+                        AUTOMATIC - Sempre actiu
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-500 mb-2">
+                      Es activa sol quan detecta fum o gas.
+                    </p>
+                    <button
+                      onClick={() => testBuzzer(d)}
+                      className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 text-sm font-bold"
+                    >
+                      Prova
+                    </button>
+                  </div>
+                )}
+
+                {d.type === 'sensor' && (
+                  <p className="text-sm text-gray-500">Nomes lectura.</p>
+                )}
+              </div>
+            );
+          })}
         </div>
 
         <div className="bg-white rounded-2xl shadow p-4 mb-6">
