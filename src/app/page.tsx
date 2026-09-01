@@ -14,6 +14,7 @@ type Household = {
 type DeviceState = {
   power?: boolean;
   position?: number;
+  temperature?: number;
 };
 
 type Device = {
@@ -495,6 +496,12 @@ export default function Home() {
                     >
                       {isOn ? 'ENCES - Toca per apagar' : 'APAGAT - Toca per encendre'}
                     </button>
+
+                    {d.type === 'fan' && d.state?.temperature !== undefined && (
+                      <p className="text-sm text-gray-500 mb-3 text-center">
+                        Temperatura actual: <strong className="text-[#1B211D]">{d.state.temperature.toFixed(1)} °C</strong>
+                      </p>
+                    )}
 
                     {(d.type === 'light' || d.type === 'fan') && (
                       <div className="flex rounded-lg overflow-hidden border border-gray-200">
