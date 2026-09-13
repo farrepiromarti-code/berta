@@ -15,6 +15,7 @@ type DeviceState = {
   power?: boolean;
   position?: number;
   temperature?: number;
+  alarm?: boolean;
 };
 
 type Device = {
@@ -38,9 +39,18 @@ const TYPE_LABELS: Record<string, string> = {
   blind: 'Persiana',
   light: 'Llum',
   fan: 'Ventilador',
-  buzzer: "Buzzer d'alarma",
+  buzzer: "Detector de fum",
   plug: 'Endoll',
   sensor: 'Sensor',
+};
+
+const TYPE_ICONS: Record<string, string> = {
+  blind: '🪟',
+  light: '💡',
+  fan: '🌡️',
+  buzzer: '🔥',
+  plug: '🔌',
+  sensor: '📊',
 };
 
 const CAPABILITIES: Record<string, string[]> = {
@@ -51,6 +61,12 @@ const CAPABILITIES: Record<string, string[]> = {
   plug: ['power'],
   sensor: ['reading'],
 };
+
+const TEXT_SCALE_MIN = 0.85;
+const TEXT_SCALE_MAX = 1.4;
+const TEXT_SCALE_STEP = 0.1;
+
+type View = 'home' | 'device' | 'settings';
 
 export default function Home() {
   const [session, setSession] = useState<Session | null>(null);
@@ -73,6 +89,10 @@ export default function Home() {
   const [newContactName, setNewContactName] = useState('');
   const [newContactEmail, setNewContactEmail] = useState('');
   const [sosSending, setSosSending] = useState(false);
+
+  const [view, setView] = useState<View>('home');
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  const [textScale, setTextScale] = useState(1);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -102,6 +122,36 @@ export default function Home() {
       setContacts([]);
     }
   }, [household]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('bertaTextScale');
+      if (saved) setTextScale(parseFloat(saved));
+    } catch {
+      // localStorage no disponible, ignorem
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.style.fontSize = (16 * textScale) + 'px';
+    try {
+      localStorage.setItem('bertaTextScale', String(textScale));
+    } catch {
+      // localStorage no disponible, ignorem
+    }
+  }, [textScale]);
+
+  function increaseTextSize() {
+    setTextScale((s) => Math.min(TEXT_SCALE_MAX, +(s + TEXT_SCALE_STEP).toFixed(2)));
+  }
+
+  function decreaseTextSize() {
+    setTextScale((s) => Math.max(TEXT_SCALE_MIN, +(s - TEXT_SCALE_STEP).toFixed(2)));
+  }
+
+  function resetTextSize() {
+    setTextScale(1);
+  }
 
   async function loadHousehold() {
     setHouseholdLoading(true);
@@ -301,93 +351,129 @@ export default function Home() {
     setSosSending(false);
   }
 
+  function openDevice(deviceId: string) {
+    setSelectedDeviceId(deviceId);
+    setView('device');
+  }
+
+  function goHome() {
+    setView('home');
+    setSelectedDeviceId(null);
+  }
+
+  const TextSizeControl = (
+    <div className="flex justify-end gap-2 mb-4">
+      <button
+        onClick={decreaseTextSize}
+        aria-label="Redueix la mida del text"
+        className="w-12 h-12 rounded-xl bg-white shadow font-bold text-lg text-[#1B211D] border border-gray-200"
+      >
+        A−
+      </button>
+      <button
+        onClick={resetTextSize}
+        aria-label="Mida normal del text"
+        className="w-12 h-12 rounded-xl bg-white shadow font-bold text-lg text-[#1B211D] border border-gray-200"
+      >
+        A
+      </button>
+      <button
+        onClick={increaseTextSize}
+        aria-label="Augmenta la mida del text"
+        className="w-12 h-12 rounded-xl bg-white shadow font-bold text-lg text-[#1B211D] border border-gray-200"
+      >
+        A+
+      </button>
+    </div>
+  );
+
   if (loading) {
-    return <p className="p-6 text-gray-500">Carregant...</p>;
+    return <p className="p-6 text-xl text-gray-500">Carregant...</p>;
   }
 
   if (!session) {
     return (
       <main className="min-h-screen bg-[#F5F2EC] flex items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
-          <h1 className="text-2xl font-bold text-[#1B211D] mb-1">Berta</h1>
-          <p className="text-sm text-gray-500 mb-4">Inicia sessio o crea un compte</p>
+          <h1 className="text-3xl font-bold text-[#1B211D] mb-1">Berta</h1>
+          <p className="text-lg text-gray-500 mb-4">Inicia sessio o crea un compte</p>
           <input
             type="email"
             placeholder="Correu"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+            className="w-full mb-2 p-4 text-lg rounded-lg border border-gray-300"
           />
           <input
             type="password"
             placeholder="Contrasenya"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            className="w-full mb-3 p-3 rounded-lg border border-gray-300"
+            className="w-full mb-3 p-4 text-lg rounded-lg border border-gray-300"
           />
           <div className="flex gap-2">
             <button
               onClick={handleSignIn}
-              className="flex-1 bg-[#20544A] text-white rounded-lg py-3 font-semibold"
+              className="flex-1 bg-[#20544A] text-white rounded-lg py-4 text-lg font-semibold"
             >
               Inicia sessio
             </button>
             <button
               onClick={handleSignUp}
-              className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
+              className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-4 text-lg font-semibold"
             >
               Crea compte
             </button>
           </div>
-          {message && <p className="text-sm text-red-600 mt-3">{message}</p>}
+          {message && <p className="text-lg text-red-600 mt-3">{message}</p>}
         </div>
       </main>
     );
   }
 
   if (householdLoading) {
-    return <p className="p-6 text-gray-500">Carregant la teva llar...</p>;
+    return <p className="p-6 text-xl text-gray-500">Carregant la teva llar...</p>;
   }
 
   if (!household) {
     return (
       <main className="min-h-screen bg-[#F5F2EC] flex items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
-          <h1 className="text-xl font-bold text-[#1B211D] mb-4">Encara no tens cap llar</h1>
+          <h1 className="text-2xl font-bold text-[#1B211D] mb-4">Encara no tens cap llar</h1>
 
-          <h2 className="font-semibold mb-2">Crea una de nova</h2>
+          <h2 className="text-lg font-semibold mb-2">Crea una de nova</h2>
           <input
             type="text"
             placeholder="Nom de la llar"
             value={newHouseholdName}
             onChange={(e) => setNewHouseholdName(e.target.value)}
-            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+            className="w-full mb-2 p-4 text-lg rounded-lg border border-gray-300"
           />
           <button
             onClick={handleCreateHousehold}
-            className="w-full bg-[#20544A] text-white rounded-lg py-3 font-semibold mb-6"
+            className="w-full bg-[#20544A] text-white rounded-lg py-4 text-lg font-semibold mb-6"
           >
             Crea la meva llar
           </button>
 
-          <h2 className="font-semibold mb-2">O uneix-te amb un codi</h2>
+          <h2 className="text-lg font-semibold mb-2">O uneix-te amb un codi</h2>
           <input
             type="text"
             placeholder="Codi de 6 caracters"
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
-            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+            className="w-full mb-2 p-4 text-lg rounded-lg border border-gray-300"
           />
           <button
             onClick={handleJoinHousehold}
-            className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
+            className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-4 text-lg font-semibold"
           >
             Uneix-me
           </button>
 
-          {message && <p className="text-sm text-red-600 mt-3">{message}</p>}
+          {message && <p className="text-lg text-red-600 mt-3">{message}</p>}
 
-          <button onClick={handleSignOut} className="text-sm text-gray-400 underline mt-6">
+          <button onClick={handleSignOut} className="text-base text-gray-400 underline mt-6">
             Tanca sessio
           </button>
         </div>
@@ -395,252 +481,333 @@ export default function Home() {
     );
   }
 
+  const selectedDevice = devices.find((d) => d.id === selectedDeviceId) ?? null;
+
   return (
     <main className="min-h-screen bg-[#F5F2EC] p-6">
       <div className="max-w-md mx-auto">
-        <h1 className="text-2xl font-bold text-[#1B211D] mb-1">{household.name}</h1>
-        <p className="text-sm text-gray-600 mb-6">
-          Codi per convidar familiars: <strong className="text-[#20544A]">{household.invite_code}</strong>
-        </p>
+        {TextSizeControl}
 
-        <button
-          onClick={handleSOS}
-          disabled={sosSending}
-          className="w-full bg-red-600 text-white rounded-2xl py-6 text-xl font-extrabold mb-6 shadow-lg disabled:opacity-60"
-        >
-          {sosSending ? 'ENVIANT...' : 'SOS - AVISA LA FAMILIA'}
-        </button>
+        {view === 'home' && (
+          <>
+            <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-1">🏠 LA MEVA CASA</h1>
+            <p className="text-xl text-gray-600 text-center mb-6">Que vols controlar?</p>
 
-        {message && <p className="text-sm text-center text-[#20544A] font-semibold mb-4">{message}</p>}
+            {message && (
+              <p className="text-lg text-center text-[#20544A] font-semibold mb-4">{message}</p>
+            )}
 
-        <div className="space-y-3 mb-6">
-          {devices.length === 0 && (
-            <p className="text-gray-500 text-sm">Encara no hi ha cap dispositiu.</p>
-          )}
+            <div className="space-y-4 mb-6">
+              {devices.length === 0 && (
+                <p className="text-gray-500 text-lg text-center">Encara no hi ha cap dispositiu.</p>
+              )}
 
-          {devices.map((d) => {
-            const isOn = Boolean(d.state?.power);
-            const position = d.state?.position;
-            const isOpen = position === 100;
-            const isClosed = position === 0;
-
-            return (
-              <div key={d.id} className="bg-white rounded-2xl shadow p-4">
-                <p className="font-semibold text-[#1B211D]">{d.name}</p>
-                <p className="text-sm text-gray-500 mb-3">
-                  {d.room} - {TYPE_LABELS[d.type] ?? d.type}
-                </p>
-
-                {d.type === 'blind' && (
+              {devices.map((d) => (
+                <button
+                  key={d.id}
+                  onClick={() => openDevice(d.id)}
+                  className="w-full flex items-center gap-4 bg-white rounded-2xl shadow p-5 text-left border border-gray-100"
+                >
+                  <span className="text-4xl">{TYPE_ICONS[d.type] ?? '🔌'}</span>
                   <div>
-                    <div className="mb-3">
-                      <span
-                        className={
-                          'inline-block px-3 py-1 rounded-full text-sm font-bold ' +
-                          (isOpen
-                            ? 'bg-[#20544A] text-white'
-                            : isClosed
-                            ? 'bg-[#A8792A] text-white'
-                            : 'bg-gray-100 text-gray-500')
-                        }
-                      >
-                        {isOpen ? 'OBERTA' : isClosed ? 'TANCADA' : 'ESTAT DESCONEGUT'}
-                      </span>
-                    </div>
-                    <div className="flex gap-2 mb-3">
-                      <button
-                        onClick={() => blindAction(d, 'open')}
-                        className={
-                          'flex-1 rounded-lg py-3 text-sm font-bold ' +
-                          (isOpen ? 'bg-[#20544A] text-white' : 'bg-[#E7F1EC] text-[#20544A]')
-                        }
-                      >
-                        Obrir
-                      </button>
-                      <button
-                        onClick={() => blindAction(d, 'stop')}
-                        className="flex-1 bg-gray-100 text-[#1B211D] rounded-lg py-3 text-sm font-bold"
-                      >
-                        Aturar
-                      </button>
-                      <button
-                        onClick={() => blindAction(d, 'close')}
-                        className={
-                          'flex-1 rounded-lg py-3 text-sm font-bold ' +
-                          (isClosed ? 'bg-[#A8792A] text-white' : 'bg-[#F4E9DD] text-[#A8792A]')
-                        }
-                      >
-                        Tancar
-                      </button>
-                    </div>
-                    <label className="text-xs text-gray-500">Tanca automaticament a les:</label>
-                    <input
-                      type="time"
-                      defaultValue={d.schedule?.close_at ?? ''}
-                      onBlur={(e) => setBlindSchedule(d, e.target.value)}
-                      className="w-full p-2 rounded-lg border border-gray-300 mt-1"
-                    />
+                    <p className="text-xl font-bold text-[#1B211D]">{d.name}</p>
+                    <p className="text-base text-gray-500">{d.room}</p>
                   </div>
-                )}
+                </button>
+              ))}
+            </div>
 
-                {(d.type === 'light' || d.type === 'fan' || d.type === 'plug') && (
-                  <div>
-                    <button
-                      onClick={() => togglePower(d, !isOn)}
+            <button
+              onClick={handleSOS}
+              disabled={sosSending}
+              className="w-full bg-red-600 text-white rounded-2xl py-7 text-2xl font-extrabold mb-4 shadow-lg disabled:opacity-60"
+            >
+              {sosSending ? 'ENVIANT...' : '🆘 SOS - AVISA LA FAMILIA'}
+            </button>
+
+            <div className="text-center">
+              <button onClick={() => setView('settings')} className="text-base text-gray-500 underline">
+                ⚙️ Configuracio
+              </button>
+            </div>
+          </>
+        )}
+
+        {view === 'device' && selectedDevice && (
+          <>
+            <button onClick={goHome} className="text-lg text-[#20544A] font-semibold mb-6">
+              ← Tornar a l&apos;inici
+            </button>
+
+            <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-6">
+              {TYPE_ICONS[selectedDevice.type] ?? '🔌'} {selectedDevice.name.toUpperCase()}
+            </h1>
+
+            {message && (
+              <p className="text-lg text-center text-[#20544A] font-semibold mb-4">{message}</p>
+            )}
+
+            {selectedDevice.type === 'blind' && (() => {
+              const position = selectedDevice.state?.position;
+              const isOpen = position === 100;
+              const isClosed = position === 0;
+              return (
+                <div className="bg-white rounded-2xl shadow p-6">
+                  <div className="text-center mb-6">
+                    <span
                       className={
-                        'w-full rounded-xl py-4 text-base font-bold mb-3 ' +
-                        (isOn
-                          ? 'bg-[#20544A] text-white'
-                          : 'bg-gray-100 text-gray-500 border-2 border-gray-200')
+                        'inline-block px-5 py-3 rounded-full text-xl font-bold ' +
+                        (isOpen
+                          ? 'bg-green-100 text-green-800'
+                          : isClosed
+                          ? 'bg-gray-200 text-gray-700'
+                          : 'bg-gray-100 text-gray-500')
                       }
                     >
-                      {isOn ? 'ENCES - Toca per apagar' : 'APAGAT - Toca per encendre'}
-                    </button>
+                      {isOpen ? '🟢 OBERTA' : isClosed ? '⚪ TANCADA' : 'ESTAT DESCONEGUT'}
+                    </span>
+                  </div>
 
-                    {d.type === 'fan' && d.state?.temperature !== undefined && (
-                      <p className="text-sm text-gray-500 mb-3 text-center">
-                        Temperatura actual: <strong className="text-[#1B211D]">{d.state.temperature.toFixed(1)} °C</strong>
+                  <div className="flex flex-col gap-4 mb-6">
+                    <button
+                      onClick={() => blindAction(selectedDevice, 'open')}
+                      className="w-full bg-[#20544A] text-white rounded-2xl py-6 text-2xl font-bold"
+                    >
+                      ⬆️ PUJAR
+                    </button>
+                    <button
+                      onClick={() => blindAction(selectedDevice, 'stop')}
+                      className="w-full bg-gray-200 text-[#1B211D] rounded-2xl py-6 text-2xl font-bold"
+                    >
+                      ⏸️ ATURAR
+                    </button>
+                    <button
+                      onClick={() => blindAction(selectedDevice, 'close')}
+                      className="w-full bg-[#A8792A] text-white rounded-2xl py-6 text-2xl font-bold"
+                    >
+                      ⬇️ BAIXAR
+                    </button>
+                  </div>
+
+                  <div>
+                    <label className="text-lg text-gray-600 block mb-2">🕐 Tancament automatic</label>
+                    <input
+                      type="time"
+                      defaultValue={selectedDevice.schedule?.close_at ?? ''}
+                      onBlur={(e) => setBlindSchedule(selectedDevice, e.target.value)}
+                      className="w-full p-4 rounded-xl border border-gray-300 text-xl text-center"
+                    />
+                  </div>
+                </div>
+              );
+            })()}
+
+            {(selectedDevice.type === 'light' ||
+              selectedDevice.type === 'fan' ||
+              selectedDevice.type === 'plug') &&
+              (() => {
+                const isOn = Boolean(selectedDevice.state?.power);
+                return (
+                  <div className="bg-white rounded-2xl shadow p-6">
+                    <div className="text-center mb-6">
+                      <span
+                        className={
+                          'inline-block px-5 py-3 rounded-full text-xl font-bold ' +
+                          (isOn ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700')
+                        }
+                      >
+                        {isOn ? '🟢 ENCES' : '⚪ APAGAT'}
+                      </span>
+                    </div>
+
+                    {selectedDevice.type === 'fan' && selectedDevice.state?.temperature !== undefined && (
+                      <p className="text-center text-4xl font-bold text-[#1B211D] mb-6">
+                        {selectedDevice.state.temperature.toFixed(1)} °C
                       </p>
                     )}
 
-                    {(d.type === 'light' || d.type === 'fan') && (
-                      <div className="flex rounded-lg overflow-hidden border border-gray-200">
+                    <button
+                      onClick={() => togglePower(selectedDevice, !isOn)}
+                      className={
+                        'w-full rounded-2xl py-7 text-2xl font-bold mb-6 ' +
+                        (isOn ? 'bg-gray-200 text-[#1B211D]' : 'bg-[#20544A] text-white')
+                      }
+                    >
+                      {isOn ? 'APAGAR' : 'ENCENDRE'}
+                    </button>
+
+                    {(selectedDevice.type === 'light' || selectedDevice.type === 'fan') && (
+                      <div className="flex rounded-xl overflow-hidden border-2 border-gray-200">
                         <button
-                          onClick={() => setMode(d, 'auto')}
+                          onClick={() => setMode(selectedDevice, 'auto')}
                           className={
-                            'flex-1 py-3 text-sm font-bold ' +
-                            (d.mode === 'auto'
+                            'flex-1 py-5 text-xl font-bold ' +
+                            (selectedDevice.mode === 'auto'
                               ? 'bg-[#20544A] text-white'
                               : 'bg-white text-gray-500')
                           }
                         >
-                          Automatic
+                          AUTOMATIC
                         </button>
                         <button
-                          onClick={() => setMode(d, 'manual')}
+                          onClick={() => setMode(selectedDevice, 'manual')}
                           className={
-                            'flex-1 py-3 text-sm font-bold ' +
-                            (d.mode === 'manual'
+                            'flex-1 py-5 text-xl font-bold ' +
+                            (selectedDevice.mode === 'manual'
                               ? 'bg-[#A8792A] text-white'
                               : 'bg-white text-gray-500')
                           }
                         >
-                          Manual
+                          MANUAL
                         </button>
                       </div>
                     )}
                   </div>
+                );
+              })()}
+
+            {selectedDevice.type === 'buzzer' && (
+              <div className="bg-white rounded-2xl shadow p-6 text-center">
+                {selectedDevice.state?.alarm ? (
+                  <>
+                    <p className="text-2xl font-extrabold text-red-700 mb-2">🚨 AVIS</p>
+                    <p className="text-xl font-bold text-red-700 mb-6">🔴 S&apos;HA DETECTAT FUM</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-green-700 mb-2">🟢 TOT CORRECTE</p>
+                    <p className="text-lg text-gray-600 mb-6">No s&apos;ha detectat fum.</p>
+                  </>
                 )}
-
-                {d.type === 'buzzer' && (
-                  <div>
-                    <div className="mb-2">
-                      <span className="inline-block px-3 py-1 rounded-full text-sm font-bold bg-[#E7F1EC] text-[#20544A]">
-                        AUTOMATIC - Sempre actiu
-                      </span>
-                    </div>
-                    <p className="text-xs text-gray-500 mb-2">
-                      Es activa sol quan detecta fum o gas.
-                    </p>
-                    <button
-                      onClick={() => testBuzzer(d)}
-                      className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 text-sm font-bold"
-                    >
-                      Prova
-                    </button>
-                  </div>
-                )}
-
-                {d.type === 'sensor' && (
-                  <p className="text-sm text-gray-500">Nomes lectura.</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-4 mb-6">
-          <h2 className="font-semibold text-[#1B211D] mb-3">Afegeix un dispositiu</h2>
-          <input
-            type="text"
-            placeholder="Nom (p. ex. Ventilador del menjador)"
-            value={newDeviceName}
-            onChange={(e) => setNewDeviceName(e.target.value)}
-            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
-          />
-          <input
-            type="text"
-            placeholder="Habitacio (p. ex. Menjador)"
-            value={newDeviceRoom}
-            onChange={(e) => setNewDeviceRoom(e.target.value)}
-            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
-          />
-          <select
-            value={newDeviceType}
-            onChange={(e) => setNewDeviceType(e.target.value)}
-            className="w-full mb-3 p-3 rounded-lg border border-gray-300"
-          >
-            <option value="blind">Persiana</option>
-            <option value="light">Llum</option>
-            <option value="fan">Ventilador</option>
-            <option value="buzzer">Buzzer d&apos;alarma</option>
-            <option value="plug">Endoll</option>
-            <option value="sensor">Sensor</option>
-          </select>
-          <button
-            onClick={handleAddDevice}
-            className="w-full bg-[#20544A] text-white rounded-lg py-3 font-semibold"
-          >
-            Afegeix
-          </button>
-        </div>
-
-        <div className="bg-white rounded-2xl shadow p-4 mb-6">
-          <h2 className="font-semibold text-[#1B211D] mb-3">Contactes d&apos;emergencia</h2>
-          <div className="space-y-2 mb-3">
-            {contacts.length === 0 && (
-              <p className="text-gray-500 text-sm">Cap contacte encara.</p>
-            )}
-            {contacts.map((c) => (
-              <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
-                <div>
-                  <p className="text-sm font-semibold text-[#1B211D]">{c.name}</p>
-                  <p className="text-xs text-gray-500">{c.email}</p>
-                </div>
                 <button
-                  onClick={() => handleDeleteContact(c.id)}
-                  className="text-xs text-red-600 underline"
+                  onClick={() => testBuzzer(selectedDevice)}
+                  className="w-full bg-gray-200 text-[#1B211D] rounded-2xl py-5 text-xl font-bold"
                 >
-                  Esborra
+                  Prova de l&apos;alarma
                 </button>
               </div>
-            ))}
-          </div>
-          <input
-            type="text"
-            placeholder="Nom del familiar"
-            value={newContactName}
-            onChange={(e) => setNewContactName(e.target.value)}
-            className="w-full mb-2 p-3 rounded-lg border border-gray-300"
-          />
-          <input
-            type="email"
-            placeholder="Correu del familiar"
-            value={newContactEmail}
-            onChange={(e) => setNewContactEmail(e.target.value)}
-            className="w-full mb-3 p-3 rounded-lg border border-gray-300"
-          />
-          <button
-            onClick={handleAddContact}
-            className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
-          >
-            Afegeix contacte
-          </button>
-        </div>
+            )}
 
-        <button onClick={handleSignOut} className="text-sm text-gray-400 underline">
-          Tanca sessio
-        </button>
+            {selectedDevice.type === 'sensor' && (
+              <div className="bg-white rounded-2xl shadow p-6 text-center">
+                <p className="text-xl text-gray-600">Nomes lectura.</p>
+              </div>
+            )}
+          </>
+        )}
+
+        {view === 'device' && !selectedDevice && (
+          <>
+            <button onClick={goHome} className="text-lg text-[#20544A] font-semibold mb-6">
+              ← Tornar a l&apos;inici
+            </button>
+            <p className="text-lg text-gray-500 text-center">Aquest dispositiu ja no existeix.</p>
+          </>
+        )}
+
+        {view === 'settings' && (
+          <>
+            <button onClick={goHome} className="text-lg text-[#20544A] font-semibold mb-6">
+              ← Tornar a l&apos;inici
+            </button>
+
+            <h1 className="text-2xl font-bold text-[#1B211D] mb-6">⚙️ Configuracio</h1>
+
+            <div className="bg-white rounded-2xl shadow p-4 mb-6">
+              <p className="text-base text-gray-600 mb-1">{household.name}</p>
+              <p className="text-sm text-gray-500">
+                Codi per convidar familiars: <strong className="text-[#20544A]">{household.invite_code}</strong>
+              </p>
+            </div>
+
+            {message && (
+              <p className="text-base text-center text-[#20544A] font-semibold mb-4">{message}</p>
+            )}
+
+            <div className="bg-white rounded-2xl shadow p-4 mb-6">
+              <h2 className="font-semibold text-[#1B211D] mb-3 text-lg">Afegeix un dispositiu</h2>
+              <input
+                type="text"
+                placeholder="Nom (p. ex. Ventilador del menjador)"
+                value={newDeviceName}
+                onChange={(e) => setNewDeviceName(e.target.value)}
+                className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+              />
+              <input
+                type="text"
+                placeholder="Habitacio (p. ex. Menjador)"
+                value={newDeviceRoom}
+                onChange={(e) => setNewDeviceRoom(e.target.value)}
+                className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+              />
+              <select
+                value={newDeviceType}
+                onChange={(e) => setNewDeviceType(e.target.value)}
+                className="w-full mb-3 p-3 rounded-lg border border-gray-300"
+              >
+                <option value="blind">Persiana</option>
+                <option value="light">Llum</option>
+                <option value="fan">Ventilador</option>
+                <option value="buzzer">Detector de fum</option>
+                <option value="plug">Endoll</option>
+                <option value="sensor">Sensor</option>
+              </select>
+              <button
+                onClick={handleAddDevice}
+                className="w-full bg-[#20544A] text-white rounded-lg py-3 font-semibold"
+              >
+                Afegeix
+              </button>
+            </div>
+
+            <div className="bg-white rounded-2xl shadow p-4 mb-6">
+              <h2 className="font-semibold text-[#1B211D] mb-3 text-lg">Contactes d&apos;emergencia</h2>
+              <div className="space-y-2 mb-3">
+                {contacts.length === 0 && (
+                  <p className="text-gray-500 text-sm">Cap contacte encara.</p>
+                )}
+                {contacts.map((c) => (
+                  <div key={c.id} className="flex items-center justify-between bg-gray-50 rounded-lg p-2">
+                    <div>
+                      <p className="text-sm font-semibold text-[#1B211D]">{c.name}</p>
+                      <p className="text-xs text-gray-500">{c.email}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteContact(c.id)}
+                      className="text-xs text-red-600 underline"
+                    >
+                      Esborra
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <input
+                type="text"
+                placeholder="Nom del familiar"
+                value={newContactName}
+                onChange={(e) => setNewContactName(e.target.value)}
+                className="w-full mb-2 p-3 rounded-lg border border-gray-300"
+              />
+              <input
+                type="email"
+                placeholder="Correu del familiar"
+                value={newContactEmail}
+                onChange={(e) => setNewContactEmail(e.target.value)}
+                className="w-full mb-3 p-3 rounded-lg border border-gray-300"
+              />
+              <button
+                onClick={handleAddContact}
+                className="w-full bg-gray-100 text-[#1B211D] rounded-lg py-3 font-semibold"
+              >
+                Afegeix contacte
+              </button>
+            </div>
+
+            <button onClick={handleSignOut} className="text-base text-gray-400 underline">
+              Tanca sessio
+            </button>
+          </>
+        )}
       </div>
     </main>
   );
