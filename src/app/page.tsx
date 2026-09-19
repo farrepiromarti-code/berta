@@ -25,7 +25,7 @@ type Device = {
   type: string;
   capabilities: string[];
   mode: 'auto' | 'manual';
-  schedule: { close_at?: string; open_at?: string } | null;
+  schedule: { close_at?: string; open_at?: string; close_on?: boolean; open_on?: boolean } | null;
   state: DeviceState | null;
 };
 
@@ -302,18 +302,34 @@ export default function Home() {
     await sendCommand(device.id, { capability: 'test' });
   }
 
-  async function updateBlindSchedule(device: Device, key: 'close_at' | 'open_at', value: string) {
+  async function setBlindTime(device: Device, key: 'close_at' | 'open_at', value: string) {
     if (!household) return;
-    const merged: { close_at?: string; open_at?: string } = { ...(device.schedule ?? {}) };
+    const onKey = key === 'close_at' ? 'close_on' : 'open_on';
+    const merged: NonNullable<Device['schedule']> = { ...(device.schedule ?? {}) };
     if (value) {
       merged[key] = value;
+      if (merged[onKey] === undefined) merged[onKey] = true;
     } else {
       delete merged[key];
+      delete merged[onKey];
     }
     const hasAny = Boolean(merged.close_at || merged.open_at);
     const { error } = await supabase
       .from('devices')
       .update({ schedule: hasAny ? merged : null })
+      .eq('id', device.id);
+    if (error) setMessage('Error: ' + error.message);
+    else await loadDevices(household.id);
+  }
+
+  async function toggleBlindSchedule(device: Device, direction: 'close' | 'open') {
+    if (!household) return;
+    const key = direction === 'close' ? 'close_on' : 'open_on';
+    const current = device.schedule?.[key] ?? true;
+    const merged: NonNullable<Device['schedule']> = { ...(device.schedule ?? {}), [key]: !current };
+    const { error } = await supabase
+      .from('devices')
+      .update({ schedule: merged })
       .eq('id', device.id);
     if (error) setMessage('Error: ' + error.message);
     else await loadDevices(household.id);
@@ -618,21 +634,51 @@ export default function Home() {
                   <div className="space-y-4">
                     <div>
                       <label className="text-lg text-gray-600 block mb-2">🕐 Obertura automàtica</label>
-                      <input
-                        type="time"
-                        defaultValue={selectedDevice.schedule?.open_at ?? ''}
-                        onBlur={(e) => updateBlindSchedule(selectedDevice, 'open_at', e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-300 text-xl text-center"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="time"
+                          defaultValue={selectedDevice.schedule?.open_at ?? ''}
+                          onBlur={(e) => setBlindTime(selectedDevice, 'open_at', e.target.value)}
+                          className="flex-1 min-w-0 p-4 rounded-xl border border-gray-300 text-xl text-center"
+                        />
+                        {selectedDevice.schedule?.open_at && (
+                          <button
+                            onClick={() => toggleBlindSchedule(selectedDevice, 'open')}
+                            className={
+                              'shrink-0 px-4 rounded-xl text-base font-bold whitespace-nowrap ' +
+                              ((selectedDevice.schedule?.open_on ?? true)
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-200 text-gray-600')
+                            }
+                          >
+                            {(selectedDevice.schedule?.open_on ?? true) ? '🟢 Activat' : '⚪ Desactivat'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div>
                       <label className="text-lg text-gray-600 block mb-2">🕐 Tancament automàtic</label>
-                      <input
-                        type="time"
-                        defaultValue={selectedDevice.schedule?.close_at ?? ''}
-                        onBlur={(e) => updateBlindSchedule(selectedDevice, 'close_at', e.target.value)}
-                        className="w-full p-4 rounded-xl border border-gray-300 text-xl text-center"
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="time"
+                          defaultValue={selectedDevice.schedule?.close_at ?? ''}
+                          onBlur={(e) => setBlindTime(selectedDevice, 'close_at', e.target.value)}
+                          className="flex-1 min-w-0 p-4 rounded-xl border border-gray-300 text-xl text-center"
+                        />
+                        {selectedDevice.schedule?.close_at && (
+                          <button
+                            onClick={() => toggleBlindSchedule(selectedDevice, 'close')}
+                            className={
+                              'shrink-0 px-4 rounded-xl text-base font-bold whitespace-nowrap ' +
+                              ((selectedDevice.schedule?.close_on ?? true)
+                                ? 'bg-green-100 text-green-800'
+                                : 'bg-gray-200 text-gray-600')
+                            }
+                          >
+                            {(selectedDevice.schedule?.close_on ?? true) ? '🟢 Activat' : '⚪ Desactivat'}
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </div>
