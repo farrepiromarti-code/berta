@@ -25,7 +25,7 @@ type Device = {
   type: string;
   capabilities: string[];
   mode: 'auto' | 'manual';
-  schedule: { close_at?: string } | null;
+  schedule: { close_at?: string; open_at?: string } | null;
   state: DeviceState | null;
 };
 
@@ -68,8 +68,12 @@ function deviceIcon(d: Device) {
   const room = d.room
     ?.trim()
     .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+    .replace(/[àá]/g, 'a')
+    .replace(/[èé]/g, 'e')
+    .replace(/[íï]/g, 'i')
+    .replace(/[òó]/g, 'o')
+    .replace(/[úü]/g, 'u')
+    .replace(/ç/g, 'c');
   const roomIcon = room ? ROOM_ICONS[room] : undefined;
   return roomIcon ? `${base}${roomIcon}` : base;
 }
@@ -216,7 +220,7 @@ export default function Home() {
     setMessage('');
     const { error } = await supabase.auth.signUp({ email, password });
     if (error) setMessage('Error: ' + error.message);
-    else setMessage('Compte creat! Ja pots iniciar sessio.');
+    else setMessage('Compte creat! Ja pots iniciar sessió.');
   }
 
   async function handleSignIn() {
@@ -298,11 +302,18 @@ export default function Home() {
     await sendCommand(device.id, { capability: 'test' });
   }
 
-  async function setBlindSchedule(device: Device, closeAt: string) {
+  async function updateBlindSchedule(device: Device, key: 'close_at' | 'open_at', value: string) {
     if (!household) return;
+    const merged: { close_at?: string; open_at?: string } = { ...(device.schedule ?? {}) };
+    if (value) {
+      merged[key] = value;
+    } else {
+      delete merged[key];
+    }
+    const hasAny = Boolean(merged.close_at || merged.open_at);
     const { error } = await supabase
       .from('devices')
-      .update({ schedule: closeAt ? { close_at: closeAt } : null })
+      .update({ schedule: hasAny ? merged : null })
       .eq('id', device.id);
     if (error) setMessage('Error: ' + error.message);
     else await loadDevices(household.id);
@@ -342,7 +353,7 @@ export default function Home() {
 
   async function handleSOS() {
     if (!household || !session || contacts.length === 0) {
-      setMessage('Afegeix algun contacte abans denviar un SOS.');
+      setMessage("Afegeix algun contacte abans d'enviar un SOS.");
       return;
     }
     setSosSending(true);
@@ -362,12 +373,12 @@ export default function Home() {
         }),
       });
       if (res.ok) {
-        setMessage('Avis enviat als familiars.');
+        setMessage('Avís enviat als familiars.');
       } else {
-        setMessage('No sha pogut enviar lavis.');
+        setMessage("No s'ha pogut enviar l'avís.");
       }
     } catch {
-      setMessage('No sha pogut enviar lavis.');
+      setMessage("No s'ha pogut enviar l'avís.");
     }
     setSosSending(false);
   }
@@ -417,7 +428,7 @@ export default function Home() {
       <main className="min-h-screen bg-[#F5F2EC] flex items-center justify-center p-6">
         <div className="w-full max-w-sm bg-white rounded-2xl shadow p-6">
           <h1 className="text-3xl font-bold text-[#1B211D] mb-1">Berta</h1>
-          <p className="text-lg text-gray-500 mb-4">Inicia sessio o crea un compte</p>
+          <p className="text-lg text-gray-500 mb-4">Inicia sessió o crea un compte</p>
           <input
             type="email"
             placeholder="Correu"
@@ -437,7 +448,7 @@ export default function Home() {
               onClick={handleSignIn}
               className="flex-1 bg-[#20544A] text-white rounded-lg py-4 text-lg font-semibold"
             >
-              Inicia sessio
+              Inicia sessió
             </button>
             <button
               onClick={handleSignUp}
@@ -480,7 +491,7 @@ export default function Home() {
           <h2 className="text-lg font-semibold mb-2">O uneix-te amb un codi</h2>
           <input
             type="text"
-            placeholder="Codi de 6 caracters"
+            placeholder="Codi de 6 caràcters"
             value={joinCode}
             onChange={(e) => setJoinCode(e.target.value)}
             className="w-full mb-2 p-4 text-lg rounded-lg border border-gray-300"
@@ -495,7 +506,7 @@ export default function Home() {
           {message && <p className="text-lg text-red-600 mt-3">{message}</p>}
 
           <button onClick={handleSignOut} className="text-base text-gray-400 underline mt-6">
-            Tanca sessio
+            Tanca sessió
           </button>
         </div>
       </main>
@@ -511,8 +522,8 @@ export default function Home() {
 
         {view === 'home' && (
           <>
-            <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-1">🏠 LA MEVA CASA</h1>
-            <p className="text-xl text-gray-600 text-center mb-6">Que vols controlar?</p>
+            <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-1">🏠 La Meva Casa</h1>
+            <p className="text-xl text-gray-600 text-center mb-6">Què vols controlar?</p>
 
             {message && (
               <p className="text-lg text-center text-[#20544A] font-semibold mb-4">{message}</p>
@@ -531,8 +542,8 @@ export default function Home() {
                 >
                   <span className="text-4xl">{deviceIcon(d)}</span>
                   <div>
-                    <p className="text-xl font-bold text-[#1B211D]">{d.name}</p>
-                    <p className="text-base text-gray-500">{d.room}</p>
+                    <p className="text-xl font-bold text-[#1B211D] capitalize">{d.name}</p>
+                    <p className="text-base text-gray-500 capitalize">{d.room}</p>
                   </div>
                 </button>
               ))}
@@ -543,12 +554,12 @@ export default function Home() {
               disabled={sosSending}
               className="w-full bg-red-600 text-white rounded-2xl py-7 text-2xl font-extrabold mb-4 shadow-lg disabled:opacity-60"
             >
-              {sosSending ? 'ENVIANT...' : '🆘 SOS - AVISA LA FAMILIA'}
+              {sosSending ? 'ENVIANT...' : '🆘 SOS - AVISA LA FAMÍLIA'}
             </button>
 
             <div className="text-center">
               <button onClick={() => setView('settings')} className="text-base text-gray-500 underline">
-                ⚙️ Configuracio
+                ⚙️ Configuració
               </button>
             </div>
           </>
@@ -604,14 +615,25 @@ export default function Home() {
                     </button>
                   </div>
 
-                  <div>
-                    <label className="text-lg text-gray-600 block mb-2">🕐 Tancament automatic</label>
-                    <input
-                      type="time"
-                      defaultValue={selectedDevice.schedule?.close_at ?? ''}
-                      onBlur={(e) => setBlindSchedule(selectedDevice, e.target.value)}
-                      className="w-full p-4 rounded-xl border border-gray-300 text-xl text-center"
-                    />
+                  <div className="space-y-4">
+                    <div>
+                      <label className="text-lg text-gray-600 block mb-2">🕐 Obertura automàtica</label>
+                      <input
+                        type="time"
+                        defaultValue={selectedDevice.schedule?.open_at ?? ''}
+                        onBlur={(e) => updateBlindSchedule(selectedDevice, 'open_at', e.target.value)}
+                        className="w-full p-4 rounded-xl border border-gray-300 text-xl text-center"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-lg text-gray-600 block mb-2">🕐 Tancament automàtic</label>
+                      <input
+                        type="time"
+                        defaultValue={selectedDevice.schedule?.close_at ?? ''}
+                        onBlur={(e) => updateBlindSchedule(selectedDevice, 'close_at', e.target.value)}
+                        className="w-full p-4 rounded-xl border border-gray-300 text-xl text-center"
+                      />
+                    </div>
                   </div>
                 </div>
               );
@@ -631,7 +653,7 @@ export default function Home() {
                           (isOn ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-700')
                         }
                       >
-                        {isOn ? '🟢 ENCES' : '⚪ APAGAT'}
+                        {isOn ? '🟢 ENCÈS' : '⚪ APAGAT'}
                       </span>
                     </div>
 
@@ -662,7 +684,7 @@ export default function Home() {
                               : 'bg-white text-gray-500')
                           }
                         >
-                          AUTOMATIC
+                          AUTOMÀTIC
                         </button>
                         <button
                           onClick={() => setMode(selectedDevice, 'manual')}
@@ -685,7 +707,7 @@ export default function Home() {
               <div className="bg-white rounded-2xl shadow p-6 text-center">
                 {selectedDevice.state?.alarm ? (
                   <>
-                    <p className="text-2xl font-extrabold text-red-700 mb-2">🚨 AVIS</p>
+                    <p className="text-2xl font-extrabold text-red-700 mb-2">🚨 AVÍS</p>
                     <p className="text-xl font-bold text-red-700 mb-6">🔴 S&apos;HA DETECTAT FUM</p>
                   </>
                 ) : (
@@ -705,7 +727,7 @@ export default function Home() {
 
             {selectedDevice.type === 'sensor' && (
               <div className="bg-white rounded-2xl shadow p-6 text-center">
-                <p className="text-xl text-gray-600">Nomes lectura.</p>
+                <p className="text-xl text-gray-600">Només lectura.</p>
               </div>
             )}
           </>
@@ -726,7 +748,7 @@ export default function Home() {
               ← Tornar a l&apos;inici
             </button>
 
-            <h1 className="text-2xl font-bold text-[#1B211D] mb-6">⚙️ Configuracio</h1>
+            <h1 className="text-2xl font-bold text-[#1B211D] mb-6">⚙️ Configuració</h1>
 
             <div className="bg-white rounded-2xl shadow p-4 mb-6">
               <p className="text-base text-gray-600 mb-1">{household.name}</p>
@@ -750,7 +772,7 @@ export default function Home() {
               />
               <input
                 type="text"
-                placeholder="Habitacio (p. ex. Menjador)"
+                placeholder="Habitació (p. ex. Menjador)"
                 value={newDeviceRoom}
                 onChange={(e) => setNewDeviceRoom(e.target.value)}
                 className="w-full mb-2 p-3 rounded-lg border border-gray-300"
@@ -776,7 +798,7 @@ export default function Home() {
             </div>
 
             <div className="bg-white rounded-2xl shadow p-4 mb-6">
-              <h2 className="font-semibold text-[#1B211D] mb-3 text-lg">Contactes d&apos;emergencia</h2>
+              <h2 className="font-semibold text-[#1B211D] mb-3 text-lg">Contactes d&apos;emergència</h2>
               <div className="space-y-2 mb-3">
                 {contacts.length === 0 && (
                   <p className="text-gray-500 text-sm">Cap contacte encara.</p>
@@ -819,7 +841,7 @@ export default function Home() {
             </div>
 
             <button onClick={handleSignOut} className="text-base text-gray-400 underline">
-              Tanca sessio
+              Tanca sessió
             </button>
           </>
         )}
