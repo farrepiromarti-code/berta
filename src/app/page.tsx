@@ -53,6 +53,27 @@ const TYPE_ICONS: Record<string, string> = {
   sensor: '📊',
 };
 
+const ROOM_ICONS: Record<string, string> = {
+  lavabo: '🚿',
+  exterior: '🌳',
+  menjador: '🍽️',
+  habitacio: '🛏️',
+  cuina: '🍳',
+  salo: '🛋️',
+  entrada: '🚪',
+};
+
+function deviceIcon(d: Device) {
+  const base = TYPE_ICONS[d.type] ?? '🔌';
+  const room = d.room
+    ?.trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+  const roomIcon = room ? ROOM_ICONS[room] : undefined;
+  return roomIcon ? `${base}${roomIcon}` : base;
+}
+
 const CAPABILITIES: Record<string, string[]> = {
   blind: ['position', 'stop'],
   light: ['power'],
@@ -508,7 +529,7 @@ export default function Home() {
                   onClick={() => openDevice(d.id)}
                   className="w-full flex items-center gap-4 bg-white rounded-2xl shadow p-5 text-left border border-gray-100"
                 >
-                  <span className="text-4xl">{TYPE_ICONS[d.type] ?? '🔌'}</span>
+                  <span className="text-4xl">{deviceIcon(d)}</span>
                   <div>
                     <p className="text-xl font-bold text-[#1B211D]">{d.name}</p>
                     <p className="text-base text-gray-500">{d.room}</p>
@@ -540,7 +561,7 @@ export default function Home() {
             </button>
 
             <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-6">
-              {TYPE_ICONS[selectedDevice.type] ?? '🔌'} {selectedDevice.name.toUpperCase()}
+              {deviceIcon(selectedDevice)} {selectedDevice.name.toUpperCase()}
             </h1>
 
             {message && (
@@ -574,12 +595,6 @@ export default function Home() {
                       className="w-full bg-[#20544A] text-white rounded-2xl py-6 text-2xl font-bold"
                     >
                       ⬆️ PUJAR
-                    </button>
-                    <button
-                      onClick={() => blindAction(selectedDevice, 'stop')}
-                      className="w-full bg-gray-200 text-[#1B211D] rounded-2xl py-6 text-2xl font-bold"
-                    >
-                      ⏸️ ATURAR
                     </button>
                     <button
                       onClick={() => blindAction(selectedDevice, 'close')}
