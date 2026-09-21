@@ -298,10 +298,6 @@ export default function Home() {
     else await loadDevices(household.id);
   }
 
-  async function testBuzzer(device: Device) {
-    await sendCommand(device.id, { capability: 'test' });
-  }
-
   async function setBlindTime(device: Device, key: 'close_at' | 'open_at', value: string) {
     if (!household) return;
     const onKey = key === 'close_at' ? 'close_on' : 'open_on';
@@ -538,7 +534,7 @@ export default function Home() {
 
         {view === 'home' && (
           <>
-            <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-1">🏠 La Meva Casa</h1>
+            <h1 className="text-3xl font-bold text-[#1B211D] text-center mb-1">🏠 LA MEVA CASA</h1>
             <p className="text-xl text-gray-600 text-center mb-6">Què vols controlar?</p>
 
             {message && (
@@ -762,12 +758,6 @@ export default function Home() {
                     <p className="text-lg text-gray-600 mb-6">No s&apos;ha detectat fum.</p>
                   </>
                 )}
-                <button
-                  onClick={() => testBuzzer(selectedDevice)}
-                  className="w-full bg-gray-200 text-[#1B211D] rounded-2xl py-5 text-xl font-bold"
-                >
-                  Prova de l&apos;alarma
-                </button>
               </div>
             )}
 
